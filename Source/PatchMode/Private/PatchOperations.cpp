@@ -1,5 +1,34 @@
 #include "PatchOperations.h"
 
+int32 PatchOps::FeatherEdgeAlpha(FPatchGrid &Grid, int32 Side, const FTransform &Transform, double Width,
+                                 const TSet<int32> *Selection)
+{
+    if (!Grid.Valid() || Side < 0 || Side > 3 || !FMath::IsFinite(Width) || Width <= 0.)
+        return 0;
+    const int32 Inward[] = {Grid.Width, -1, -Grid.Width, 1};
+    const int32 Depth = Side % 2 == 0 ? Grid.Height : Grid.Width;
+    int32 Changed = 0;
+    for (int32 Index : EdgeIndices(Grid, Side))
+    {
+        double Distance = 0.;
+        for (int32 Step = 0; Step < Depth; ++Step, Index += Inward[Side])
+        {
+            auto &Point = Grid.Points[Index];
+            if (Step)
+                Distance += Transform.TransformVector(Point.Position - Grid.Points[Index - Inward[Side]].Position).Length();
+            if (Distance >= Width)
+                break;
+            const float Alpha = float(FMath::SmoothStep(0., Width, Distance));
+            if (!Point.bLocked && (!Selection || Selection->Contains(Index)) && Point.Color.A > Alpha)
+            {
+                Point.Color.A = Alpha;
+                ++Changed;
+            }
+        }
+    }
+    return Changed;
+}
+
 FPatchPoint PatchOps::Blend(const FPatchPoint &A, const FPatchPoint &B, double T)
 {
     FPatchPoint P;

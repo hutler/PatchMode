@@ -72,6 +72,13 @@ class FPatchEdMode : public FEdMode
         }
     };
     FBoundary HoverEdge, ExtrudeEdge, SeamFrom, SeamTo;
+    struct FSeamPair
+    {
+        TArray<int32> Source, Destination;
+        bool bReversed = false;
+        FString Issue;
+    };
+    FSeamPair InspectSeam(const FBoundary &Target, TOptional<bool> Reverse) const;
     TWeakObjectPtr<APatchSurface> HoverPatch;
     int32 HoverPoint = INDEX_NONE, HoverAxis = INDEX_NONE, DragAxis = INDEX_NONE;
     bool bConsumeClick = false, bPointPressed = false, bEdgeDrag = false, bReverseSeam = false;

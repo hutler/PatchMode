@@ -138,6 +138,8 @@ class UPatchSettings : public UObject
     bool bBlue = true;
     UPROPERTY(EditAnywhere, Category = "Brush")
     bool bOnlySelected = false;
+    UPROPERTY(EditAnywhere, Category = "Brush", meta = (ClampMin = 0.01, Units = "cm"))
+    double FeatherWidth = 100;
     UPROPERTY(EditAnywhere, Category = "Brush")
     int32 NoiseSeed = 137;
     UPROPERTY(EditAnywhere, Category = "UV")

@@ -10,6 +10,8 @@ namespace PatchOps
 {
 TArray<int32> EdgeIndices(const FPatchGrid &, int32 Side);
 bool ExtrudeBoundary(FPatchGrid &, int32 Side, const FTransform &, FVector WorldOffset);
+int32 FeatherEdgeAlpha(FPatchGrid &Grid, int32 Side, const FTransform &Transform, double Width,
+                       const TSet<int32> *Selection);
 FPatchPoint Blend(const FPatchPoint &A, const FPatchPoint &B, double T);
 FPatchGrid Section(const FPatchGrid &Grid, int32 X, int32 Y, int32 Width, int32 Height);
 void Transpose(FPatchGrid &Grid);

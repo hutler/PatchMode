@@ -139,7 +139,9 @@ FText FPatchEdMode::CommandHint(Cmd C) const
         Hint = C == Cmd::Rope ? TEXT("Click two anchors to place a rope.")
                               : TEXT("Place the base in the viewport, then size the preview.");
     else if (C == Cmd::Extrude)
-        Hint = TEXT("Drag an outside edge or its handle. Each drag adds one row.");
+        Hint = TEXT("Drag a terrain boundary. Type a length in cm while dragging. Release or press Enter to apply.");
+    else if (C == Cmd::FeatherAlpha)
+        Hint = TEXT("Fade vertex alpha from the chosen boundary over the feather width. Existing lower alpha is kept.");
     else if (C == Cmd::ConnectEdges)
         Hint = TEXT("Pick the source edge, then the destination edge. R reverses, Enter applies.");
     else
@@ -383,6 +385,17 @@ void FPatchEdMode::Execute(Cmd C)
     P->Modify();
     switch (C)
     {
+    case Cmd::FeatherAlpha: {
+        const int32 Count = PatchOps::FeatherEdgeAlpha(G, int32(S.Edge), P->GetActorTransform(), S.FeatherWidth,
+                                                       S.bOnlySelected ? &Points : nullptr);
+        SetStatus(FString::Printf(TEXT("Feather Edge Alpha changed %d control points."), Count));
+        if (!Count)
+            return;
+        S.Brush = EPatchBrush::PaintAlpha;
+        if (!P->Material)
+            P->Display = EPatchPreview::VertexAlpha;
+        break;
+    }
     case Cmd::ToTerrain: {
         const FPatchGrid Original = G;
         const int32 Steps = FMath::Clamp(G.Subdivisions, 1, 32);

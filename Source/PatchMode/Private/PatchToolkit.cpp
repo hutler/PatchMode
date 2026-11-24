@@ -82,8 +82,16 @@ void FPatchToolkit::Build()
     AddProperty("Height", [this] { return Mode->Tool == C::Sculpt; });
     AddProperty("Color", [this] { return Mode->Tool == C::Paint; });
     AddProperty("Pick", [this] { return Mode->Tool == C::Select; });
-    for (FName Property : {FName("Edge"), FName("ExtrudeLength"), FName("ExtrudeDirection")})
+    AddProperty("Edge", [this] { return Mode->Tool == C::Extrude || Mode->Tool == C::Paint; });
+    for (FName Property : {FName("ExtrudeLength"), FName("ExtrudeDirection")})
         AddProperty(Property, Extrude);
+    AddProperty("FeatherWidth", [this] { return Mode->Tool == C::Paint; });
+    Context->AddSlot().AutoHeight()[SNew(SButton)
+        .Text(FText::FromString(TEXT("Feather Edge Alpha")))
+        .Visibility_Lambda([this] { return Mode->Tool == C::Paint ? EVisibility::Visible : EVisibility::Collapsed; })
+        .IsEnabled_Lambda([this] { return Mode->CanExecute(C::FeatherAlpha); })
+        .ToolTipText_Lambda([this] { return Mode->CommandHint(C::FeatherAlpha); })
+        .OnClicked_Lambda([this] { Mode->Execute(C::FeatherAlpha); return FReply::Handled(); })];
     for (FName Property : {FName("Size"), FName("Rows"), FName("Columns")})
         AddProperty(Property, Place);
     for (FName Property : {FName("RopeRadius"), FName("RopeSagPercent")})
@@ -126,6 +134,7 @@ void FPatchToolkit::Build()
                                         })];
     AddGroup(TEXT("Active Tool"), Context, true);
     TSet<C> Shortcuts;
+    Shortcuts.Add(C::FeatherAlpha);
     auto QuickGroup = [&](const TCHAR *Title, std::initializer_list<TPair<C, const TCHAR *>> Tiles) {
         auto Grid = SNew(SGridPanel);
         Grid->SetColumnFill(0, 1);

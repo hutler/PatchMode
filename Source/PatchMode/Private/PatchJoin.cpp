@@ -92,19 +92,70 @@ void FPatchEdMode::SetConnectedSubdivisions(APatchSurface &Start, int32 Steps)
     }
 }
 
-bool FPatchEdMode::ApplySeam(APatchSurface &P, const TArray<int32> &From, APatchSurface &Other, const TArray<int32> &To)
+static FString SeamIssue(const APatchSurface &P, const TArray<int32> &From, const APatchSurface &Other,
+                         const TArray<int32> &To)
 {
-    if (&P == &Other || From.Num() != To.Num() || From.IsEmpty() || P.Grid.Kind != Other.Grid.Kind)
-        return false;
+    if (&P == &Other)
+        return TEXT("Choose an edge on another patch.");
+    if (P.Grid.Kind != Other.Grid.Kind)
+        return FString::Printf(TEXT("Source %d pts, target %d pts. Choose a %s patch."),
+                               From.Num(), To.Num(), P.Grid.Kind == EPatchKind::Curve ? TEXT("Curve") : TEXT("Terrain"));
+    if (From.Num() != To.Num() || From.IsEmpty())
+        return FString::Printf(TEXT("Source %d pts, target %d pts. Edge counts must match."), From.Num(), To.Num());
     const auto Src = P.GetActorTransform(), Dst = Other.GetActorTransform();
     for (int32 I = 0; I < From.Num(); ++I)
         if (P.Grid.Points[From[I]].bLocked &&
             !Src.TransformPosition(P.Grid.Points[From[I]].Position)
                  .Equals(Dst.TransformPosition(Other.Grid.Points[To[I]].Position), .001))
+            return FString::Printf(TEXT("%d pairs. Unlock source point %d to move it."), From.Num(), From[I]);
+    return {};
+}
+
+FPatchEdMode::FSeamPair FPatchEdMode::InspectSeam(const FBoundary &Target, TOptional<bool> Reverse) const
+{
+    FSeamPair Pair;
+    if (!SeamFrom.Valid() || !Target.Valid())
+    {
+        Pair.Issue = TEXT("Pick two patch boundaries.");
+        return Pair;
+    }
+    const auto &A = *SeamFrom.Patch, &B = *Target.Patch;
+    Pair.Source = EdgeIndices(A.Grid, SeamFrom.Side);
+    Pair.Destination = EdgeIndices(B.Grid, Target.Side);
+    if (A.Grid.Kind == B.Grid.Kind && Pair.Source.Num() == Pair.Destination.Num())
+    {
+        if (Reverse.IsSet())
+            Pair.bReversed = Reverse.GetValue();
+        else
         {
-            SetStatus(TEXT("Unlock the source edge before connecting it."));
-            return false;
+            double ForwardScore = 0, ReverseScore = 0;
+            for (int32 I = 0; I < Pair.Source.Num(); ++I)
+            {
+                const FVector Pos = A.GetActorTransform().TransformPosition(A.Grid.Points[Pair.Source[I]].Position);
+                auto Score = [&](int32 Index) {
+                    return FVector::DistSquared(Pos, B.GetActorTransform().TransformPosition(B.Grid.Points[Index].Position));
+                };
+                ForwardScore += Score(Pair.Destination[I]);
+                ReverseScore += Score(Pair.Destination.Last(I));
+            }
+            Pair.bReversed = ReverseScore < ForwardScore;
         }
+        if (Pair.bReversed)
+            Algo::Reverse(Pair.Destination);
+    }
+    Pair.Issue = SeamIssue(A, Pair.Source, B, Pair.Destination);
+    return Pair;
+}
+
+bool FPatchEdMode::ApplySeam(APatchSurface &P, const TArray<int32> &From, APatchSurface &Other, const TArray<int32> &To)
+{
+    const FString Issue = SeamIssue(P, From, Other, To);
+    if (!Issue.IsEmpty())
+    {
+        SetStatus(Issue);
+        return false;
+    }
+    const auto Src = P.GetActorTransform(), Dst = Other.GetActorTransform();
     P.Modify();
     for (int32 I = 0; I < From.Num(); ++I)
         P.Grid.Points[From[I]].Position =

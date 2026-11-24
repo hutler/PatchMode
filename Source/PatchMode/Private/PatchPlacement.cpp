@@ -156,25 +156,16 @@ void FPatchEdMode::PickBoundary()
     }
     if (HoverEdge.Patch == SeamFrom.Patch)
         return;
-    const auto &A = *SeamFrom.Patch, &B = *HoverEdge.Patch;
-    auto From = PatchOps::EdgeIndices(A.Grid, SeamFrom.Side), To = PatchOps::EdgeIndices(B.Grid, HoverEdge.Side);
-    if (A.Grid.Kind != B.Grid.Kind || From.Num() != To.Num())
+    const auto Pair = InspectSeam(HoverEdge, {});
+    if (SeamFrom.Patch->Grid.Kind != HoverEdge.Patch->Grid.Kind || Pair.Source.Num() != Pair.Destination.Num())
     {
         SeamTo = {};
-        SetStatus(TEXT("Pick a boundary of the same patch type and point count."));
+        SetStatus(Pair.Issue);
         return;
     }
-    double Forward = 0, Reverse = 0;
-    for (int32 I = 0; I < From.Num(); ++I)
-    {
-        const FVector P = A.GetActorTransform().TransformPosition(A.Grid.Points[From[I]].Position);
-        Forward += FVector::DistSquared(P, B.GetActorTransform().TransformPosition(B.Grid.Points[To[I]].Position));
-        Reverse += FVector::DistSquared(P, B.GetActorTransform().TransformPosition(B.Grid.Points[To.Last(I)].Position));
-    }
     SeamTo = HoverEdge;
-    bReverseSeam = Reverse < Forward;
-    SetStatus(
-        TEXT("R reverses the pairs. Enter joins the edges. Esc cancels. Curve normals show the predicted seam angle."));
+    bReverseSeam = Pair.bReversed;
+    SetStatus(Pair.Issue.IsEmpty() ? TEXT("R reverses the pairs. Enter joins the edges. Esc cancels.") : Pair.Issue);
 }
 bool FPatchEdMode::HasSeamPair() const
 {
@@ -185,13 +176,16 @@ void FPatchEdMode::ReverseSeam()
     if (HasSeamPair())
     {
         bReverseSeam = !bReverseSeam;
+        const FString Issue = InspectSeam(SeamTo, bReverseSeam).Issue;
+        SetStatus(Issue.IsEmpty() ? TEXT("R reverses the pairs. Enter joins the edges. Esc cancels.") : Issue);
         GEditor->RedrawLevelEditingViewports();
     }
 }
 bool FPatchEdMode::CanConfirm() const
 {
-    return HasSeamPair() || (Primitive(Tool) && bPlaceHit && PlaceStage > 0) ||
-           (Tool == Cmd::Extrude && Active() && !bEdgeDrag);
+    if (HasSeamPair())
+        return InspectSeam(SeamTo, bReverseSeam).Issue.IsEmpty();
+    return (Primitive(Tool) && bPlaceHit && PlaceStage > 0) || (Tool == Cmd::Extrude && Active() && !bEdgeDrag);
 }
 void FPatchEdMode::ConfirmPreview()
 {
@@ -223,12 +217,9 @@ void FPatchEdMode::ConfirmPreview()
     }
     else
     {
-        auto From = PatchOps::EdgeIndices(SeamFrom.Patch->Grid, SeamFrom.Side);
-        auto To = PatchOps::EdgeIndices(SeamTo.Patch->Grid, SeamTo.Side);
-        if (bReverseSeam)
-            Algo::Reverse(To);
+        const auto Pair = InspectSeam(SeamTo, bReverseSeam);
         const FScopedTransaction Tx(FText::FromString(TEXT("Connect patch boundaries")));
-        if (ApplySeam(*SeamFrom.Patch, From, *SeamTo.Patch, To))
+        if (ApplySeam(*SeamFrom.Patch, Pair.Source, *SeamTo.Patch, Pair.Destination))
         {
             auto *P = SeamFrom.Patch.Get();
             ResetInteraction(false);

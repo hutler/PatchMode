@@ -17,6 +17,33 @@
 using Cmd = EPatchCommand;
 const FName FPatchEdMode::Id(TEXT("EM_PatchMode"));
 
+static bool EditCentimeters(FKey Key, bool bSigned, FString &Input)
+{
+    if (Key == EKeys::BackSpace)
+    {
+        Input.LeftChopInline(FMath::Min(1, Input.Len()));
+        return true;
+    }
+    static const FKey Digits[] = {EKeys::Zero, EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four,
+                                  EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine};
+    static const FKey Keypad[] = {EKeys::NumPadZero, EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree,
+                                  EKeys::NumPadFour, EKeys::NumPadFive, EKeys::NumPadSix, EKeys::NumPadSeven,
+                                  EKeys::NumPadEight, EKeys::NumPadNine};
+    TCHAR Ch = 0;
+    for (int32 I = 0; I < 10; ++I)
+        if (Key == Digits[I] || Key == Keypad[I])
+            Ch = '0' + I;
+    if (Key == EKeys::Period || Key == EKeys::Decimal)
+        Ch = '.';
+    if (bSigned && (Key == EKeys::Hyphen || Key == EKeys::Subtract))
+        Ch = '-';
+    if (!Ch)
+        return false;
+    if (Input.Len() < 8 && (Ch != '.' || !Input.Contains(TEXT("."))) && (Ch != '-' || Input.IsEmpty()))
+        Input.AppendChar(Ch);
+    return true;
+}
+
 struct HPatchPoint : HHitProxy
 {
     DECLARE_HIT_PROXY();
@@ -666,7 +693,10 @@ bool FPatchEdMode::InputKey(FEditorViewportClient *Client, FViewport *VP, FKey K
     {
         if (Key == EKeys::Enter)
         {
-            ConfirmPreview();
+            if (bEdgeDrag)
+                PointerKey(Client, VP, IE_Released);
+            else
+                ConfirmPreview();
             Client->Invalidate();
             return true;
         }
@@ -675,28 +705,13 @@ bool FPatchEdMode::InputKey(FEditorViewportClient *Client, FViewport *VP, FKey K
             ReverseSeam();
             return true;
         }
-        if (Primitive(Tool) && PlaceStage > 0 && Tool != Cmd::Rope)
+        if ((bEdgeDrag || (Primitive(Tool) && PlaceStage > 0 && Tool != Cmd::Rope)) &&
+            EditCentimeters(Key, bEdgeDrag, NumericInput))
         {
-            FString Name = Key.GetFName().ToString();
-            const FKey Digits[] = {EKeys::Zero, EKeys::One, EKeys::Two,   EKeys::Three, EKeys::Four,
-                                   EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine};
-            for (int32 I = 0; I < 10; ++I)
-                if (Key == Digits[I] || Name == FString::Printf(TEXT("NumPad%d"), I))
-                    Name = FString::FromInt(I);
-            if (Key == EKeys::Period || Key == EKeys::Decimal)
-                Name = TEXT(".");
-            if (Key == EKeys::BackSpace)
-            {
-                NumericInput.LeftChopInline(FMath::Min(1, NumericInput.Len()));
-                return true;
-            }
-            if (Name.Len() == 1 && (FChar::IsDigit(Name[0]) || (Name[0] == '.' && !NumericInput.Contains(TEXT(".")))))
-            {
-                if (NumericInput.Len() < 8)
-                    NumericInput += Name;
-                Client->Invalidate();
-                return true;
-            }
+            if (bEdgeDrag)
+                MoveHandle(Client, VP, VP->GetMouseX(), VP->GetMouseY());
+            Client->Invalidate();
+            return true;
         }
     }
     if (Key == EKeys::LeftMouseButton && (Tool == Cmd::Paint || Tool == Cmd::Sculpt))

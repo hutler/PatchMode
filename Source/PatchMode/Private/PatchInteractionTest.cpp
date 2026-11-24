@@ -14,6 +14,33 @@
 
 using Cmd = EPatchCommand;
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPatchFeatherTest, "PatchMode.FeatherEdgeAlpha",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FPatchFeatherTest::RunTest(const FString &)
+{
+    const FTransform Transform(FRotator(20, 45, 5), FVector(120, 40, -10), FVector(2));
+    for (int32 Side = 0; Side < 4; ++Side)
+    {
+        auto G = FPatchGrid::Make(EPatchPrimitive::Curve, 5, 3, FVector(200, 100, 1), 0);
+        const auto Edge = PatchOps::EdgeIndices(G, Side);
+        const int32 Inward[] = {G.Width, -1, -G.Width, 1};
+        const int32 Inside = Edge[0] + Inward[Side];
+        const TSet<int32> Selection{Edge[0], Edge[1], Inside};
+        G.Points[Edge[1]].bLocked = true;
+        const FLinearColor Original(.2f, .35f, .4f, .8f);
+        G.Points[Inside].Color = Original;
+        TestEqual(TEXT("Only unlocked selected controls change"),
+                  PatchOps::FeatherEdgeAlpha(G, Side, Transform, 200, &Selection), 2);
+        TestTrue(TEXT("Edge, world scale, RGB and lock respected"),
+                 G.Points[Edge[0]].Color.A == 0 && G.Points[Edge[1]].Color.A == 1 &&
+                 G.Points[Edge[2]].Color.A == 1 && G.Points[Inside].Color.Equals(FLinearColor(.2f,.35f,.4f,.5f)));
+        TestEqual(TEXT("Repeating the mask is idempotent"), PatchOps::FeatherEdgeAlpha(G, Side, Transform, 200, &Selection), 0);
+        G.Points[Inside].Color.A = .1f;
+        TestEqual(TEXT("Lower prepainted alpha is preserved"), PatchOps::FeatherEdgeAlpha(G, Side, Transform, 200, &Selection), 0);
+    }
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPatchBoundaryTest, "PatchMode.BoundaryExtrusion",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPatchBoundaryTest::RunTest(const FString &)
@@ -60,6 +87,7 @@ bool FPatchInteractionTest::RunTest(const FString &)
     FLevelEditorViewportClient *Client = PatchTestViewport();
     if (!TestNotNull(TEXT("Active patch mode"), Mode) || !TestNotNull(TEXT("Level viewport"), Client))
         return false;
+    AddInfo(FString::Printf(TEXT("Interaction viewport: %s"), *UEnum::GetValueAsString(Client->GetViewportType())));
     FViewport *VP = Client->Viewport;
     const FIntPoint Original(VP->GetMouseX(), VP->GetMouseY());
     ON_SCOPE_EXIT
@@ -120,6 +148,15 @@ bool FPatchInteractionTest::RunTest(const FString &)
     TestTrue(TEXT("Drag retains selection"), Mode->Active() == P && Mode->Points.Contains(I));
     GEditor->UndoTransaction();
     TestTrue(TEXT("One undo restores point"), P->Grid.Points[I].Position.Equals(G.Points[I].Position));
+    Mode->ActivateTool(Cmd::Paint);
+    Mode->Options->Edge = EPatchBoundary::FirstRow;
+    Mode->Options->FeatherWidth = 200;
+    Mode->Execute(Cmd::FeatherAlpha);
+    TestTrue(TEXT("Paint feathers edge alpha in world centimeters"),
+             P->Grid.At(1, 0).Color.A == 0 && FMath::IsNearlyEqual(P->Grid.At(1, 1).Color.A, .5f) &&
+                 P->Grid.At(1, 2).Color.A == 1 && P->Display == EPatchPreview::VertexAlpha);
+    GEditor->UndoTransaction();
+    TestEqual(TEXT("Undo restores the alpha mask"), P->Grid.At(1, 0).Color.A, 1.f);
     Mode->ActivateTool(Cmd::Extrude);
     const FVector Edge(100, 0, 0);
     Move(Pixel(Edge));
@@ -141,6 +178,28 @@ bool FPatchInteractionTest::RunTest(const FString &)
         GEditor->UndoTransaction();
         TestEqual(TEXT("One undo removes the first extrusion"), P->Grid.Width, 3);
     }
+    Mode->ActivateTool(Cmd::Extrude);
+    Move(Pixel(Edge));
+    Press();
+    Move(Pixel(Edge + FVector(40, 0, 0)));
+    Press(EKeys::Eight);
+    Press(EKeys::BackSpace);
+    Press(EKeys::NumPadSeven);
+    Press(EKeys::Decimal);
+    Press(EKeys::Five);
+    Move(Pixel(Edge + FVector(80, 0, 0)));
+    Press(EKeys::Enter);
+    Release();
+    TestTrue(TEXT("Typed 7.5 cm overrides snapping and mouse motion, Enter adds exactly one column"),
+             P->Grid.Width == 4 && P->Grid.At(3, 1).Position.Equals(Edge + FVector(7.5, 0, 0), .001));
+    GEditor->UndoTransaction();
+    TestEqual(TEXT("One undo removes numeric extrusion"), P->Grid.Width, 3);
+    Move(Pixel(Edge));
+    Press();
+    Press(EKeys::One);
+    Press(EKeys::Escape);
+    Release();
+    TestEqual(TEXT("Esc cancels typed extrusion"), P->Grid.Width, 3);
     Mode->ActivateTool(Cmd::Cylinder);
     Click(FVector(0, -200, 0));
     Press(EKeys::Four);
@@ -166,8 +225,30 @@ bool FPatchInteractionTest::RunTest(const FString &)
     Mode->SelectPatch(A);
     Mode->ActivateTool(Cmd::ConnectEdges);
     const FVector Source(-95, 0, 40), Destination(95, 0, 40);
+    const FPatchGrid OriginalDestination = B->Grid;
+    B->Grid = FPatchGrid::Make(EPatchPrimitive::Curve, 3, 5, FVector(120), 0);
+    B->Changed();
     Click(Source);
     Click(Destination);
+    TestTrue(TEXT("Mismatched edges report both counts"), !Mode->CanConfirm() &&
+             Mode->Status.ToString().Contains(TEXT("3 pts, target 5 pts")));
+    B->Grid = OriginalDestination;
+    B->Grid.Kind = EPatchKind::Terrain;
+    B->Changed();
+    Click(Destination);
+    TestTrue(TEXT("Mismatched types identify the required patch"), !Mode->CanConfirm() &&
+             Mode->Status.ToString().Contains(TEXT("Choose a Curve patch")));
+    B->Grid = OriginalDestination;
+    B->Changed();
+    A->Grid.At(2, 1).bLocked = true;
+    Click(Destination);
+    TestTrue(TEXT("A blocked pair can be reversed but cannot be applied"), Mode->HasSeamPair() && !Mode->CanConfirm() &&
+             Mode->Status.ToString().Contains(TEXT("Unlock source point")));
+    Press(EKeys::Enter);
+    TestTrue(TEXT("Locked edge remains unchanged"), A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position)
+                                                       .Equals(Plane.RotateVector(Source)));
+    A->Grid.At(2, 1).bLocked = false;
+    TestTrue(TEXT("Unlocking enables the same pair"), Mode->CanConfirm());
     TestTrue(TEXT("Two matching edges preview"), Mode->HasSeamPair());
     TestTrue(TEXT("Source untouched before apply"),
              A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Plane.RotateVector(Source)));

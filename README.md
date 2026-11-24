@@ -2,7 +2,7 @@
 
 Patch Mode is an Unreal Editor plugin for shaping surfaces with a grid of control points. Use **Terrain** for roads and ground surfaces, or **Curve** for arches, pipes, and other rounded shapes. Each patch stays editable in the level. **Bake Static Mesh** creates a standard Unreal static mesh for use in the game.
 
-The prebuilt **0.2.2** release targets **Unreal Engine 5.8.4 on Windows x64**.
+The prebuilt **0.2.2** release targets **Unreal Engine 5.8.4 on Windows x64**. The **0.3.0-dev** source build adds edge alpha feathering, typed extrusion lengths, and seam diagnostics.
 
 ![A terrain patch in Unreal Editor with its control grid visible and the translation axes on the selected point.](docs/images/terrain-controls.png)
 
@@ -46,6 +46,8 @@ You can also split and refine the grid, lock points, edit three UV channels, and
 
 Select the Terrain patch and choose **Extrude**. Hover over the right boundary until its handle turns gold, then drag outward and release. Here, a 150 cm drag adds a fifth column of control points. The original edge stays in place as an interior grid line.
 
+In **0.3.0-dev**, hold the mouse button on the handle and type a signed distance in centimeters, such as `37.5`. The typed length overrides grid snapping. Press **Enter** or release the mouse to commit, or press **Esc** to cancel. **Backspace** clears digits. Clearing the field resumes mouse dragging.
+
 ![The pointer grabs the right boundary handle, drags it outward to 150 cm, then releases it to leave a new column of terrain.](docs/images/extrude.gif)
 
 <details>
@@ -63,6 +65,8 @@ Choose **Join → Connect Edges**. Click the right edge of the teal source patch
 
 Press **Enter** to move the source edge onto the destination edge. The orange patch stays in place, and each patch remains a separate actor.
 
+In **0.3.0-dev**, hover over a candidate edge to see its point count and whether it can connect. The viewport reports mismatched counts, the required surface type, or a locked source point that would have to move. A compatible pair shows the number of matched points before you confirm.
+
 ![The pointer clicks the source edge, then the destination edge. Five white lines preview the pairing until Enter joins the two boundaries.](docs/images/connect-edges.gif)
 
 <details>
@@ -79,6 +83,12 @@ Press **Enter** to move the source edge onto the destination edge. The orange pa
 Choose **Sculpt** and move the pointer over the surface. The yellow ring shows the brush footprint. In this example, the **Height** brush has a radius of 130 cm and a strength of 0.5.
 
 ![The Sculpt tool with its radius and strength settings alongside the brush footprint on a terrain patch.](docs/images/sculpt-brush.png)
+
+### Feather vertex alpha from an edge (0.3.0-dev)
+
+Select a Terrain or Curve patch, choose **Paint**, then set **Edge** and **Feather Width** in **Active Tool**. Click **Feather Edge Alpha** to fade the chosen boundary to zero. Width is measured in world centimeters along the control grid. Lower alpha values you already painted are preserved. **Only Selected** limits the effect to selected points, and locked points keep their values.
+
+With a vertex-alpha blend material, the band can soften a transition such as dirt along a road. A patch without an assigned material shows the mask in grayscale. The command switches the brush to **Paint Alpha** for touch-ups. **Ctrl+Z** restores the previous mask.
 
 ### Preview a rope
 

@@ -3,6 +3,7 @@
 #include "EditorModeManager.h"
 #include "EditorViewportClient.h"
 #include "Engine/Canvas.h"
+#include "Engine/Font.h"
 #include "EngineUtils.h"
 #include "LevelEditorViewport.h"
 #include "PatchEdMode.h"
@@ -215,6 +216,8 @@ bool FPatchEdMode::PointerKey(FEditorViewportClient *Client, FViewport *VP, EInp
             if (!bEdgeDrag && Options->bTolerantSnap && !Touched.IsEmpty() && Active())
                 Join(Cmd::TolerantWeld, *Active());
             FinishGesture(FMath::Abs(DragAmount) < .001);
+            if (bEdgeDrag)
+                NumericInput.Reset();
             DragAxis = INDEX_NONE;
             bEdgeDrag = false;
             ReadPoint();
@@ -273,7 +276,9 @@ void FPatchEdMode::MoveHandle(FEditorViewportClient *Client, FViewport *, int32 
     if (!P || DragScreenAxis.IsNearlyZero())
         return;
     double Next = FVector2D::DotProduct(FVector2D(X, Y) - DragPixel, DragScreenAxis) / DragScreenAxis.SquaredLength();
-    if (GetDefault<ULevelEditorViewportSettings>()->GridEnabled)
+    if (bEdgeDrag && !NumericInput.IsEmpty())
+        Next = FCString::Atod(*NumericInput);
+    else if (GetDefault<ULevelEditorViewportSettings>()->GridEnabled)
         Next = FMath::GridSnap(Next, double(GEditor->GetGridSize()));
     if (FMath::IsNearlyEqual(Next, DragAmount, .001))
         return;
@@ -432,12 +437,15 @@ void FPatchEdMode::DrawHUD(FEditorViewportClient *Client, FViewport *VP, const F
 {
     FEdMode::DrawHUD(Client, VP, View, Canvas);
     FString Label;
+    FLinearColor LabelColor = FLinearColor::White;
     FVector At = FVector::ZeroVector;
     if (bEdgeDrag || DragAxis != INDEX_NONE)
     {
         At = HandleOrigin + HandleDirection * DragAmount;
         const TCHAR *Axes[] = {TEXT("X"), TEXT("Y"), TEXT("Z")};
         Label = FString::Printf(TEXT("%s  %+.1f cm"), bEdgeDrag ? TEXT("Extrude") : Axes[DragAxis], DragAmount);
+        if (bEdgeDrag && !NumericInput.IsEmpty())
+            Label = FString::Printf(TEXT("Extrude  %s cm  |  Enter to apply"), *NumericInput);
     }
     else if (Primitive(Tool) && bPlaceHit)
     {
@@ -458,16 +466,45 @@ void FPatchEdMode::DrawHUD(FEditorViewportClient *Client, FViewport *VP, const F
         if (!NumericInput.IsEmpty())
             Label = NumericInput + TEXT(" cm");
     }
-    else if (HasSeamPair() && SeamFrom.Patch->Grid.Kind == EPatchKind::Curve)
+    else if (Tool == Cmd::ConnectEdges && (HoverEdge.Valid() || SeamFrom.Valid()))
     {
-        At = WorldPoint(*SeamTo.Patch, PatchOps::EdgeIndices(SeamTo.Patch->Grid, SeamTo.Side)[0]);
-        Label = TEXT("Seam normals: green = aligned, red = 90 deg or more");
+        const bool Paired = HasSeamPair();
+        const auto &Edge = Paired ? SeamTo : (HoverEdge.Valid() ? HoverEdge : SeamFrom);
+        const auto Indices = PatchOps::EdgeIndices(Edge.Patch->Grid, Edge.Side);
+        At = WorldPoint(*Edge.Patch, Indices[Indices.Num() / 2]);
+        if (!SeamFrom.Valid())
+            Label = FString::Printf(TEXT("%d pts  |  Click source edge"), Indices.Num());
+        else if (Edge.Patch == SeamFrom.Patch)
+            Label = FString::Printf(TEXT("Source: %d pts  |  Pick destination"), Indices.Num());
+        else
+        {
+            const auto Pair = InspectSeam(Edge, Paired ? TOptional<bool>(bReverseSeam) : TOptional<bool>());
+            if (!Pair.Issue.IsEmpty())
+            {
+                Label = Pair.Issue;
+                LabelColor = FLinearColor(1, .45f, .2f);
+            }
+            else
+            {
+                Label = FString::Printf(TEXT("%d pairs  |  %s"), Indices.Num(),
+                                        Paired ? TEXT("R reverse  |  Enter join") : TEXT("Click destination edge"));
+                if (Paired && Edge.Patch->Grid.Kind == EPatchKind::Curve)
+                    Label += TEXT("\nSeam normals: green = aligned, red = 90 deg or more");
+            }
+        }
     }
     FVector2D Pixel;
     if (!Label.IsEmpty() && View->WorldToPixel(At, Pixel))
     {
-        FCanvasTextItem Text((Pixel + FVector2D(14, 14)) / Canvas->GetDPIScale(), FText::FromString(Label),
-                             GEngine->GetSmallFont(), FLinearColor::White);
+        UFont *Font = GEngine->GetSmallFont();
+        const double Dpi = Canvas->GetDPIScale();
+        FVector2D Origin = (Pixel + FVector2D(14, 14)) / Dpi;
+        int32 Height, Width;
+        Font->GetStringHeightAndWidth(Label, Height, Width);
+        const FVector2D Limit = FVector2D(VP->GetSizeXY()) / Dpi - FVector2D(Width + 4, Height + 4);
+        Origin.X = FMath::Clamp(Origin.X, 4., FMath::Max(4., Limit.X));
+        Origin.Y = FMath::Clamp(Origin.Y, 4., FMath::Max(4., Limit.Y));
+        FCanvasTextItem Text(Origin, FText::FromString(Label), Font, LabelColor);
         Text.EnableShadow(FLinearColor::Black);
         Canvas->DrawItem(Text);
     }
