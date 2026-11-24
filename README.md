@@ -46,19 +46,33 @@ You can also split and refine the grid, lock points, edit three UV channels, and
 
 Select the Terrain patch and choose **Extrude**. Hover over the right boundary until its handle turns gold, then drag outward and release. Here, a 150 cm drag adds a fifth column of control points. The original edge stays in place as an interior grid line.
 
+![The pointer grabs the right boundary handle, drags it outward to 150 cm, then releases it to leave a new column of terrain.](docs/images/extrude.gif)
+
+<details>
+<summary>Compare the terrain before and after the drag</summary>
+
 | Before dragging | After releasing the handle |
 | --- | --- |
 | ![Terrain with four columns of control points and the right boundary handle highlighted in gold.](docs/images/extrude-before.png) | ![The same terrain with an extra strip of surface between the original right edge and the new boundary.](docs/images/extrude-after.png) |
+
+</details>
 
 ### Connect two patch edges
 
 Choose **Join → Connect Edges**. Click the right edge of the teal source patch, then the facing edge of the orange destination patch. Both patches must have the same surface type, and the two edges must have the same number of control points. The white lines show which points will meet. If the lines cross, press **R** to reverse the pairing.
 
+Press **Enter** to move the source edge onto the destination edge. The orange patch stays in place, and each patch remains a separate actor.
+
+![The pointer clicks the source edge, then the destination edge. Five white lines preview the pairing until Enter joins the two boundaries.](docs/images/connect-edges.gif)
+
+<details>
+<summary>Compare the pairing preview with the finished seam</summary>
+
 | Before pressing Enter | After pressing Enter |
 | --- | --- |
 | ![Five white lines span the gap between the selected edges of the teal and orange terrain patches.](docs/images/connect-edges-before.png) | ![The teal patch extends to the orange patch and their edges meet along a continuous seam.](docs/images/connect-edges-after.png) |
 
-Press **Enter** to move the source edge onto the destination edge. The orange patch stays in place, and each patch remains a separate actor.
+</details>
 
 ### Sculpt a terrain patch
 
