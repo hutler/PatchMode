@@ -1,55 +1,79 @@
 # Patch Mode
 
-Patch Mode добавляет в Unreal Editor редактирование поверхностей по сетке контрольных точек. Terrain подходит для дорог и рельефа, Curve — для арок, труб и других криволинейных форм. Патч хранится в уровне как редактируемый актор. Команда **Bake Static Mesh** создаёт из него обычный Static Mesh для игры.
+Patch Mode is an Unreal Editor plugin for shaping surfaces with a grid of control points. Use **Terrain** for roads and ground surfaces, or **Curve** for arches, pipes, and other rounded shapes. Each patch stays editable in the level. **Bake Static Mesh** creates a standard Unreal static mesh for use in the game.
 
-Версия 0.2.2 рассчитана на Unreal Engine 5.8.4 на Windows x64.
+The prebuilt **0.2.2** release targets **Unreal Engine 5.8.4 on Windows x64**.
 
-## Установка
+![A terrain patch in Unreal Editor with its control grid visible and the translation axes on the selected point.](docs/images/terrain-controls.png)
 
-### Из архивов 0.2.2 без клонирования
+<a id="установка"></a>
 
-Закройте Unreal Editor. Все пути ниже указаны относительно папки с файлом `.uproject`.
+## Installation
 
-- **Плагин** распакуйте в `Plugins/`, чтобы получился файл `Plugins/PatchMode/PatchMode.uplugin`. [Скачать Patch Mode 0.2.2 для UE 5.8.4 / Win64](https://github.com/hutler/PatchMode/releases/download/v0.2.2/PatchMode-0.2.2-UE5.8.4-Win64.zip)
-- **Тестовый уровень** распакуйте рядом с `.uproject`, чтобы получился файл `Content/Tests/PatchCollisionTest.umap`. [Скачать PatchCollisionTest с мешами и скриптом](https://github.com/hutler/PatchMode/releases/download/v0.2.2/PatchCollisionTest-0.2.2-UE5.8.4.zip)
+### Install from the 0.2.2 release ZIPs
 
-Откройте проект. В **Edit → Plugins** включите **Patch Mode** и **Python Editor Script Plugin**. Если редактор предложит перезапуск, подтвердите его. В **Content Browser → Content → Tests** откройте **PatchCollisionTest** и выполните `py check_patch_collision.py` в поле **Cmd** окна **Output Log**. При успехе появится `PatchCollisionTest PASS`.
+Close Unreal Editor. Both destinations below are relative to the folder containing your `.uproject` file.
 
-### Из исходников
+| Download | Where to extract it | File to look for |
+| --- | --- | --- |
+| [Patch Mode 0.2.2 for UE 5.8.4 / Win64](https://github.com/hutler/PatchMode/releases/download/v0.2.2/PatchMode-0.2.2-UE5.8.4-Win64.zip) | `Plugins/` | `Plugins/PatchMode/PatchMode.uplugin` |
+| [PatchCollisionTest level, meshes, and Python script](https://github.com/hutler/PatchMode/releases/download/v0.2.2/PatchCollisionTest-0.2.2-UE5.8.4.zip) | Project root, beside the `.uproject` file | `Content/Tests/PatchCollisionTest.umap` |
 
-1. Поместите репозиторий в каталог `Plugins/PatchMode` вашего C++ проекта. Файл `PatchMode.uplugin` должен лежать непосредственно в этой папке.
-2. Соберите Editor-таргет проекта в конфигурации **Development Editor / Win64** и откройте проект.
-3. При необходимости включите **Patch Mode** в **Edit → Plugins**. Затем выберите **Patch Mode** в меню режимов Level Editor.
+Open the project and enable **Patch Mode** under **Edit → Plugins**. To run the sample collision check, also enable **Python Editor Script Plugin**. Restart the editor if prompted. Select **Patch Mode** from the Level Editor mode selector to start editing, or follow the [collision check](#collision-check) to test the baked mesh.
 
-## Работа во вьюпорте
+### Build from source
 
-| Действие | Управление |
+1. Clone or copy this repository into `Plugins/PatchMode` in your C++ project. The plugin descriptor should be at `Plugins/PatchMode/PatchMode.uplugin`.
+2. Build the project's Editor target using **Development Editor / Win64**, then open the project.
+3. Enable **Patch Mode** under **Edit → Plugins** if needed, then select **Patch Mode** from the Level Editor mode selector.
+
+## Viewport editing
+
+| Task | Controls |
 | --- | --- |
-| Создать патч | Выберите **Terrain** или **Curve**, щёлкните в сцене для установки центра и вторым щелчком подтвердите размер. |
-| Переместить точку | В режиме **Select** выберите точку и потяните за цветную ось. Во время движения рядом видно смещение. |
-| Вытянуть границу Terrain | Включите **Extrude** и потяните наружный край за маркер. Для точной длины используйте **Active Tool → Extrude by length**. |
-| Разместить трос | Выберите **Primitives → Rope**. В **Active Tool** задайте **Rope Radius** и **Rope Sag Percent**, затем двумя щелчками укажите концы троса. |
-| Состыковать патчи | В **Join → Connect Edges** выберите исходный край и целевой край второго патча. Тип поверхностей и число точек на краях должны совпадать. **R** меняет порядок пар, **Enter** применяет стык, **Esc** отменяет предпросмотр. |
-| Сформировать и окрасить поверхность | **Sculpt** меняет форму, **Paint** редактирует цвета и альфу вершин. Контур кисти и подсветка точек показывают область действия. |
+| Create a patch | Choose **Terrain** or **Curve**. Click to place its center, move the pointer to size the preview, then click again to confirm. |
+| Move a control point | With **Select** active, click a point and drag a colored axis. The viewport shows the offset as you drag. |
+| Extend a terrain edge | Choose **Extrude** and drag a boundary handle outward. For an exact distance, use **Active Tool → Extrude by length**. |
+| Place a rope | Choose **Primitives → Rope**, set **Rope Radius** and **Rope Sag Percent** under **Active Tool**, then click the two anchor positions in the viewport. |
+| Join two patches | Choose **Join → Connect Edges**. Click the source edge, then the destination edge. Both patches must have the same surface type and the edges must have the same number of control points. Press **R** to reverse the pairing, **Enter** to apply, or **Esc** to cancel. |
+| Sculpt or paint | **Sculpt** changes the surface shape. **Paint** edits vertex color and alpha. The brush outline and highlighted points show which part of the surface a stroke will affect. |
 
-Плагин также поддерживает разрезание и уплотнение сетки, блокировку точек, редактирование трёх UV-каналов и построение оболочек. Для отмены завершённого жеста используйте **Ctrl+Z**.
+In an orthographic view, **Terrain**, **Curve**, and **Draw Terrain** create patches in the plane of the screen, facing the camera. A positive **Height** in **Sculpt** raises points along the patch's local Z axis. When control points project to the same screen position, picking favors the point nearest the camera.
 
-В ортографическом виде **Terrain**, **Curve** и **Draw Terrain** создают патч в плоскости экрана, лицевой стороной к камере. Положительная высота кисти **Sculpt** поднимает точки вдоль локальной оси Z патча. При выборе точек, которые проецируются в одно место, приоритет получает ближайшая к камере.
+You can also split and refine the grid, lock points, edit three UV channels, and build shells. Press **Ctrl+Z** to undo a completed gesture.
 
-## Проверка сборки
+### Sculpt a terrain patch
 
-В тестовом проекте откройте **Session Frontend → Automation** и запустите группу `PatchMode`. Тесты создают временные уровни. Для проверки конкретной проекции сначала активируйте нужный вид в Level Editor. Тесты вьюпорта используют его для выбора точки, перетаскивания, вытягивания края и смены диагонали Terrain.
+Choose **Sculpt** and move the pointer over the surface. The yellow ring shows the brush footprint. In this example, the **Height** brush has a radius of 130 cm and a strength of 0.5.
 
-## Проверка коллизии на уровне PatchCollisionTest
+![The Sculpt tool with its radius and strength settings alongside the brush footprint on a terrain patch.](docs/images/sculpt-brush.png)
 
-На уровне есть редактируемые `Terrain` и `Curve`, а также вертикальная запечённая сетка `Curve_Baked`. В примере собраны уровень, три меша сцены и проверочный скрипт. [Файлы примера](Examples/PatchCollisionTest/Content)
+### Preview a rope
 
-При установке из исходников закройте редактор и скопируйте папки `Tests`, `PatchMeshes` и `Python` из `Examples/PatchCollisionTest/Content` в `Content` проекта. Затем откройте уровень и запустите скрипт по инструкции в разделе [«Установка»](#установка).
+Click the first anchor, then move the pointer to the second. The viewport shows the span and sag before you confirm. Here the anchors are 470 cm apart, with **Rope Radius** set to 8 cm and **Rope Sag Percent** set to 16%.
 
-Скрипт пускает луч `Visibility` через поверхность, исключая исходную `Curve`. Он проверяет попадание в компонент актора `Curve_Baked` на расстоянии 80 см с допуском 0,5 см. Второй луч направлен от поверхности и должен пройти свободно. При успехе в журнале появится `PatchCollisionTest PASS` с координатами попадания.
+![The Rope tool with radius and sag settings and a wireframe preview suspended between two anchors.](docs/images/rope-preview.png)
+
+<a id="проверка-коллизии-на-уровне-patchcollisiontest"></a>
+
+## Collision check
+
+`PatchCollisionTest` contains editable `Terrain` and `Curve` actors and a vertical baked mesh named `Curve_Baked`. The sample includes the level, all three scene meshes, and the check script. [Browse the sample files](Examples/PatchCollisionTest/Content)
+
+1. Install the two release archives as described under [Installation](#installation). If you built from source, close the editor and copy `Tests`, `PatchMeshes`, and `Python` from `Examples/PatchCollisionTest/Content` into your project's `Content` folder. Enable **Python Editor Script Plugin** before running the check.
+2. In the **Content Browser**, open **Content → Tests → PatchCollisionTest**.
+3. In the **Cmd** field of the **Output Log**, run `py check_patch_collision.py`.
+
+The script traces the **Visibility** channel through the surface, ignoring the editable `Curve` actor. It expects to hit the static mesh component on `Curve_Baked` at **80 cm**, within a tolerance of **0.5 cm**. A second ray points away from the surface and should travel unobstructed. A successful run prints this line in the Output Log.
 
 ```text
 PatchCollisionTest PASS | Curve_Baked.StaticMeshComponent0 | 80.00 cm | impact (-420.0, 211.0, -17.0) | control ray clear
 ```
 
-Исходный код Patch Mode распространяется под лицензией MIT. [Текст лицензии](LICENSE)
+## Editor automation tests
+
+In a test project, open **Session Frontend → Automation** and run the `PatchMode` group. The tests create temporary levels. To check a specific projection, activate that view in the Level Editor first. The viewport tests exercise point selection and dragging, boundary extrusion, and switching a terrain cell's diagonal.
+
+## License
+
+Patch Mode is released under the [MIT License](LICENSE).
