@@ -6,6 +6,17 @@ Patch Mode добавляет в Unreal Editor редактирование по
 
 ## Установка
 
+### Из архивов 0.2.2 без клонирования
+
+Закройте Unreal Editor. Все пути ниже указаны относительно папки с файлом `.uproject`.
+
+- **Плагин** распакуйте в `Plugins/`, чтобы получился файл `Plugins/PatchMode/PatchMode.uplugin`. [Скачать Patch Mode 0.2.2 для UE 5.8.4 / Win64](https://github.com/hutler/PatchMode/releases/download/v0.2.2/PatchMode-0.2.2-UE5.8.4-Win64.zip)
+- **Тестовый уровень** распакуйте рядом с `.uproject`, чтобы получился файл `Content/Tests/PatchCollisionTest.umap`. [Скачать PatchCollisionTest с мешами и скриптом](https://github.com/hutler/PatchMode/releases/download/v0.2.2/PatchCollisionTest-0.2.2-UE5.8.4.zip)
+
+Откройте проект. В **Edit → Plugins** включите **Patch Mode** и **Python Editor Script Plugin**. Если редактор предложит перезапуск, подтвердите его. В **Content Browser → Content → Tests** откройте **PatchCollisionTest** и выполните `py check_patch_collision.py` в поле **Cmd** окна **Output Log**. При успехе появится `PatchCollisionTest PASS`.
+
+### Из исходников
+
 1. Поместите репозиторий в каталог `Plugins/PatchMode` вашего C++ проекта. Файл `PatchMode.uplugin` должен лежать непосредственно в этой папке.
 2. Соберите Editor-таргет проекта в конфигурации **Development Editor / Win64** и откройте проект.
 3. При необходимости включите **Patch Mode** в **Edit → Plugins**. Затем выберите **Patch Mode** в меню режимов Level Editor.
@@ -33,9 +44,7 @@ Patch Mode добавляет в Unreal Editor редактирование по
 
 На уровне есть редактируемые `Terrain` и `Curve`, а также вертикальная запечённая сетка `Curve_Baked`. В примере собраны уровень, три меша сцены и проверочный скрипт. [Файлы примера](Examples/PatchCollisionTest/Content)
 
-1. Установите Patch Mode в тестовый проект по инструкции выше. В **Edit → Plugins** включите **Python Editor Script Plugin**.
-2. Закройте редактор. Скопируйте папки `Tests`, `PatchMeshes` и `Python` из `Examples/PatchCollisionTest/Content` в папку **Content** рядом с файлом `.uproject`. Уровень должен оказаться в `Content/Tests`, а меши — в `Content/PatchMeshes`.
-3. Откройте проект. В **Content Browser → Content → Tests** дважды щёлкните **PatchCollisionTest**. Откройте **Output Log** и в поле **Cmd** выполните `py check_patch_collision.py`.
+При установке из исходников закройте редактор и скопируйте папки `Tests`, `PatchMeshes` и `Python` из `Examples/PatchCollisionTest/Content` в `Content` проекта. Затем откройте уровень и запустите скрипт по инструкции в разделе [«Установка»](#установка).
 
 Скрипт пускает луч `Visibility` через поверхность, исключая исходную `Curve`. Он проверяет попадание в компонент актора `Curve_Baked` на расстоянии 80 см с допуском 0,5 см. Второй луч направлен от поверхности и должен пройти свободно. При успехе в журнале появится `PatchCollisionTest PASS` с координатами попадания.
 
