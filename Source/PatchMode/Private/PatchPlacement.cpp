@@ -2,6 +2,7 @@
 #include "EditorViewportClient.h"
 #include "PatchEdMode.h"
 #include "PatchOperations.h"
+#include "PatchViewPlane.h"
 #include "SceneView.h"
 #include "Settings/LevelEditorViewportSettings.h"
 
@@ -9,8 +10,8 @@ using Cmd = EPatchCommand;
 
 void FPatchEdMode::UpdatePlacement(const FSceneView *View, FEditorViewportClient *Client, FIntPoint Pixel)
 {
-    const FViewportCursorLocation Ray(View, Client, Pixel.X, Pixel.Y);
-    const FVector Origin = Ray.GetOrigin(), Dir = Ray.GetDirection();
+    const FRay Ray = PatchCursorRay(*View, *Client, Pixel);
+    const FVector Origin = Ray.Origin, Dir = Ray.Direction;
     const bool Flat = Tool == Cmd::Terrain || Tool == Cmd::Curve;
     if (PlaceStage == 0 || Tool == Cmd::Rope)
     {
@@ -32,8 +33,7 @@ void FPatchEdMode::UpdatePlacement(const FSceneView *View, FEditorViewportClient
         if (PlaceStage == 0)
         {
             PlaceBase = At;
-            PlaceRotation =
-                Flat && Client->IsOrtho() ? FQuat::FindBetweenNormals(FVector::UpVector, -Dir) : FQuat::Identity;
+            PlaceRotation = Flat ? PatchPlaneRotation(*Client) : FQuat::Identity;
         }
         return;
     }

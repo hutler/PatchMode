@@ -9,6 +9,7 @@
 #include "Misc/ScopeExit.h"
 #include "PatchEdMode.h"
 #include "PatchOperations.h"
+#include "PatchTestViewport.h"
 #include "Tests/AutomationEditorCommon.h"
 
 using Cmd = EPatchCommand;
@@ -56,13 +57,7 @@ bool FPatchInteractionTest::RunTest(const FString &)
     auto &Modes = GLevelEditorModeTools();
     Modes.ActivateMode(FPatchEdMode::Id);
     auto *Mode = Modes.GetActiveModeTyped<FPatchEdMode>(FPatchEdMode::Id);
-    FLevelEditorViewportClient *Client = nullptr;
-    for (auto *C : GEditor->GetLevelViewportClients())
-        if (C && C->Viewport && C->IsPerspective())
-        {
-            Client = C;
-            break;
-        }
+    FLevelEditorViewportClient *Client = PatchTestViewport();
     if (!TestNotNull(TEXT("Active patch mode"), Mode) || !TestNotNull(TEXT("Level viewport"), Client))
         return false;
     FViewport *VP = Client->Viewport;
@@ -74,16 +69,18 @@ bool FPatchInteractionTest::RunTest(const FString &)
     };
     Modes.SetWidgetMode(UE::Widget::WM_Translate);
     const FVector Camera(400, -630, 610);
-    Client->SetViewLocation(Camera);
-    Client->SetViewRotation((-Camera).Rotation());
+    FPatchTestCamera TestCamera(*Client, Camera, FVector::ZeroVector);
     FSceneViewFamilyContext Family(
         FSceneViewFamily::ConstructionValues(VP, Client->GetScene(), Client->EngineShowFlags));
     const auto *View = Client->CalcSceneView(&Family);
     if (!TestNotNull(TEXT("Scene view"), View))
         return false;
-    auto Pixel = [&](FVector At) {
+    // The floor and patches share the view plane in each orthographic projection.
+    const FQuat Plane = Client->IsOrtho() ? FQuat::FindBetweenNormals(FVector::UpVector, -View->GetViewDirection())
+                                          : FQuat::Identity;
+    auto Pixel = [&](FVector Local) {
         FVector2D XY = FVector2D::ZeroVector;
-        View->WorldToPixel(At, XY);
+        View->WorldToPixel(Plane.RotateVector(Local), XY);
         return XY;
     };
     auto Move = [&](FVector2D XY) {
@@ -103,22 +100,23 @@ bool FPatchInteractionTest::RunTest(const FString &)
     Floor->GetStaticMeshComponent()->SetStaticMesh(
         LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
     Floor->SetActorScale3D(FVector(15, 15, .5));
-    Floor->SetActorLocation(FVector(0, 0, -26));
+    Floor->SetActorLocationAndRotation(Plane.RotateVector(FVector(0, 0, -26)), Plane);
     auto G = FPatchGrid::Make(EPatchPrimitive::Terrain, 3, 3, FVector(200), 0);
-    auto *P = Mode->Spawn(G, FTransform::Identity, TEXT("Pointer test"));
+    auto *P = Mode->Spawn(G, FTransform(Plane), TEXT("Pointer test"));
     Mode->SelectPatch(P);
     Mode->ActivateTool(Cmd::Select);
     const int32 I = G.Index(1, 1);
     Click(G.Points[I].Position);
     TestTrue(TEXT("Control selected above floor"), Mode->Active() == P && Mode->Points.Contains(I));
-    const auto Z = (Pixel(FVector(0, 0, 100)) - Pixel(FVector::ZeroVector)).GetSafeNormal();
-    Move(Pixel(FVector::ZeroVector) + Z * 25);
+    const FVector Axis = Client->IsOrtho() ? Plane.UnrotateVector(Plane.GetAxisX().GetAbs()) : FVector::UpVector;
+    const auto ScreenAxis = (Pixel(Axis * 100.) - Pixel(FVector::ZeroVector)).GetSafeNormal();
+    Move(Pixel(FVector::ZeroVector) + ScreenAxis * 25);
     Press();
-    Move(Pixel(FVector::ZeroVector) + Z * 55);
+    Move(Pixel(FVector::ZeroVector) + ScreenAxis * 55);
     Release();
-    TestTrue(TEXT("Axis moves only the chosen point"), P->Grid.Points[I].Position.Z > 0 &&
-                                                           P->Grid.Points[I].Position.Size2D() < .01 &&
-                                                           P->Grid.Points[0].Position.Equals(G.Points[0].Position));
+    const FVector Moved = P->Grid.Points[I].Position - G.Points[I].Position;
+    TestTrue(TEXT("Axis moves only the chosen point"), Moved.Dot(Axis) > 0 &&
+                 Moved.Equals(Axis * Moved.Dot(Axis), .01) && P->Grid.Points[0].Position.Equals(G.Points[0].Position));
     TestTrue(TEXT("Drag retains selection"), Mode->Active() == P && Mode->Points.Contains(I));
     GEditor->UndoTransaction();
     TestTrue(TEXT("One undo restores point"), P->Grid.Points[I].Position.Equals(G.Points[I].Position));
@@ -163,8 +161,8 @@ bool FPatchInteractionTest::RunTest(const FString &)
     Click(FVector(0, 100, 0));
     TestTrue(TEXT("Second world anchor commits the rope"), Mode->Active() != Tube && Mode->Active()->Grid.Height == 5);
     auto *A = Mode->Spawn(FPatchGrid::Make(EPatchPrimitive::Curve, 3, 3, FVector(120), 0),
-                          FTransform(FVector(-155, 0, 40)), TEXT("Source"));
-    auto *B = Mode->Spawn(A->Grid, FTransform(FVector(155, 0, 40)), TEXT("Destination"));
+                          FTransform(Plane, Plane.RotateVector(FVector(-155, 0, 40))), TEXT("Source"));
+    auto *B = Mode->Spawn(A->Grid, FTransform(Plane, Plane.RotateVector(FVector(155, 0, 40))), TEXT("Destination"));
     Mode->SelectPatch(A);
     Mode->ActivateTool(Cmd::ConnectEdges);
     const FVector Source(-95, 0, 40), Destination(95, 0, 40);
@@ -172,17 +170,46 @@ bool FPatchInteractionTest::RunTest(const FString &)
     Click(Destination);
     TestTrue(TEXT("Two matching edges preview"), Mode->HasSeamPair());
     TestTrue(TEXT("Source untouched before apply"),
-             A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Source));
+             A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Plane.RotateVector(Source)));
     Press(EKeys::R);
     Press(EKeys::Escape);
     TestTrue(TEXT("Cancel leaves source unchanged"),
-             A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Source));
+             A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Plane.RotateVector(Source)));
     Mode->ActivateTool(Cmd::ConnectEdges);
     Click(Source);
     Click(Destination);
     Press(EKeys::Enter);
     TestTrue(TEXT("Confirm connects picked edges"),
-             A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Destination));
+             A->GetActorTransform().TransformPosition(A->Grid.At(2, 1).Position).Equals(Plane.RotateVector(Destination)));
+    if (Client->IsOrtho())
+    {
+        // These controls occupy one pixel. Put the farther one first in storage.
+        Mode->SelectPatch(P);
+        Mode->ActivateTool(Cmd::Select);
+        const bool SavedDrillDown = Mode->Options->bDrillDown;
+        Mode->Options->bDrillDown = true;
+        P->Grid.Points[0].Position = G.Points[I].Position - FVector::UpVector * 30.;
+        P->Changed();
+        Click(G.Points[I].Position);
+        TestTrue(TEXT("Overlapping controls select the one nearest the camera"), Mode->Points.Contains(I) && !Mode->Points.Contains(0));
+        Mode->Options->bDrillDown = SavedDrillDown;
+        Mode->ActivateTool(Cmd::Curve);
+        Click(FVector(180, 200, 0));
+        Click(FVector(220, 230, 0));
+        auto *Curve = Mode->Active();
+        TestTrue(TEXT("Placed curve faces the camera"), Curve && Curve != A && Curve != B &&
+                     Curve->Grid.Kind == EPatchKind::Curve && Curve->GetActorUpVector().Equals(-View->GetViewDirection()));
+        Mode->ActivateTool(Cmd::DrawTerrain);
+        Move(Pixel(FVector(180, 200, 0)));
+        Press();
+        Move(Pixel(FVector(125, 240, 0)));
+        Release();
+        auto *Drawn = Mode->Active();
+        TestTrue(TEXT("Rectangle drag creates a view-facing terrain with the requested dimensions"),
+                 Drawn && Drawn != Curve && Drawn->Grid.Kind == EPatchKind::Terrain &&
+                 Drawn->GetActorUpVector().Equals(-View->GetViewDirection()) &&
+                 Drawn->Grid.At(1, 1).Position.Equals(FVector(-55, 40, 0), 4.));
+    }
     return true;
 }
 #endif

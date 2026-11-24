@@ -101,7 +101,8 @@ class FPatchEdMode : public FEdMode
     bool ApplySeam(APatchSurface &, const TArray<int32> &, APatchSurface &, const TArray<int32> &);
     TUniquePtr<FScopedTransaction> Gesture;
     bool bPainting = false, bDrawing = false;
-    FVector DrawOrigin = FVector::ZeroVector, DrawNormal = FVector::UpVector;
+    FVector DrawOrigin = FVector::ZeroVector;
+    FQuat DrawRotation = FQuat::Identity;
     TOptional<FVector> Cursor;
     int32 LastMouseY = 0;
     TMap<TWeakObjectPtr<APatchSurface>, TPair<FPatchGrid, bool>> Touched;
@@ -111,6 +112,6 @@ class FPatchEdMode : public FEdMode
     bool ApplyStamp(APatchSurface *, FVector, double);
     void Join(EPatchCommand, APatchSurface &);
     void SetConnectedSubdivisions(APatchSurface &, int32);
-    void FaceToTerrain(FEditorViewportClient *, const FViewportClick &);
+    void FaceToTerrain(const FRay &);
     void ReadPoint();
 };

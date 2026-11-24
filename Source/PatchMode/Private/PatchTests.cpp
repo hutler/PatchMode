@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "PatchOperations.h"
 #include "PatchEdMode.h"
+#include "PatchTestViewport.h"
 #include "PatchBake.h"
 #include "Editor.h"
 #include "EditorModeManager.h"
@@ -96,6 +97,8 @@ bool FPatchEditorTest::RunTest(const FString &)
     auto *P = Mode->Active();
     if (!TestNotNull(TEXT("Terrain selected after creation"), P))
         return false;
+    if (auto *Client = PatchTestViewport(); Client && Client->Viewport == GEditor->GetActiveViewport() && Client->IsOrtho())
+        TestTrue(TEXT("Terrain front faces the orthographic camera"), P->GetActorUpVector().Equals(-Client->GetForwardVector()));
     Mode->SelectPoint(P, 0, false);
     Mode->Options->Position = FVector(-200, -200, 30);
     Mode->Execute(EPatchCommand::SetPosition);
@@ -125,10 +128,11 @@ bool FPatchEditorTest::RunTest(const FString &)
     FHitResult Hit;
     FCollisionQueryParams Q(SCENE_QUERY_STAT(PatchTest), true);
     Q.AddIgnoredActor(P);
-    const FVector Mid = P->GetActorLocation() + FVector(20, 20, 0);
+    const FVector Mid = P->GetActorTransform().TransformPosition(FVector(20, 20, 0));
+    const FVector Above = P->GetActorUpVector() * 200.;
     TestTrue(
         TEXT("Baked mesh blocks visibility ray"),
-        World->LineTraceSingleByChannel(Hit, Mid + FVector(0, 0, 200), Mid - FVector(0, 0, 200), ECC_Visibility, Q) &&
+        World->LineTraceSingleByChannel(Hit, Mid + Above, Mid - Above, ECC_Visibility, Q) &&
             Hit.GetActor() == Baked);
     Tools.DeactivateMode(FPatchEdMode::Id);
     return true;
@@ -197,15 +201,16 @@ bool FPatchBrushTest::RunTest(const FString &)
     A->Grid = FPatchGrid::Make(EPatchPrimitive::Terrain, 3, 3, FVector(200), 0);
     A->Changed();
     const int32 Center = A->Grid.Index(1, 1);
-    const FVector Ray = A->GetActorLocation() + FVector(0, 0, 200);
+    const FVector Normal = A->GetActorUpVector();
+    const FVector Ray = A->GetActorLocation() + Normal * 200.;
     Mode->Options->Radius = 120;
     Mode->Options->Strength = 1;
     Mode->Options->Height = 12;
     A->Grid.At(0, 1).bLocked = true;
     Mode->Execute(EPatchCommand::Sculpt);
     Mode->BeginBrushStroke();
-    TestTrue(TEXT("Brush ray hits the visible surface"), Mode->BrushRay(Ray, -FVector::UpVector, 0));
-    Mode->BrushRay(Ray, -FVector::UpVector, 0);
+    TestTrue(TEXT("Brush ray hits the visible surface"), Mode->BrushRay(Ray, -Normal, 0));
+    TestTrue(TEXT("Second stamp hits the raised surface"), Mode->BrushRay(Ray, -Normal, 0));
     Mode->EndBrushStroke();
     TestTrue(TEXT("Two stamps raise the vertex"), A->Grid.Points[Center].Position.Z > 20);
     TestEqual(TEXT("Locked neighbour unchanged"), A->Grid.At(0, 1).Position.Z, 0.);
@@ -215,7 +220,7 @@ bool FPatchBrushTest::RunTest(const FString &)
     Mode->Options->Color.A = .25f;
     Mode->Execute(EPatchCommand::Paint);
     Mode->BeginBrushStroke();
-    Mode->BrushRay(Ray, -FVector::UpVector, 0);
+    Mode->BrushRay(Ray, -Normal, 0);
     Mode->EndBrushStroke();
     TestEqual(TEXT("Painted alpha"), A->Grid.Points[Center].Color.A, .25f);
     TestEqual(TEXT("Paint does not change RGB"), A->Grid.Points[Center].Color.R, 1.f);

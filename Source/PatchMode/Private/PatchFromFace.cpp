@@ -1,4 +1,5 @@
 #include "PatchEdMode.h"
+#include "Math/Ray.h"
 #include "EditorViewportClient.h"
 #include "Editor.h"
 #include "EngineUtils.h"
@@ -9,9 +10,9 @@
 #include "MeshDescription.h"
 #include "Components/StaticMeshComponent.h"
 
-void FPatchEdMode::FaceToTerrain(FEditorViewportClient *, const FViewportClick &Click)
+void FPatchEdMode::FaceToTerrain(const FRay &Ray)
 {
-    const FVector Start = Click.GetOrigin(), End = Start + Click.GetDirection() * 1e8;
+    const FVector Start = Ray.Origin, End = Ray.PointAt(1.e8);
     double Nearest = TNumericLimits<double>::Max();
     TArray<FVector> Polygon;
     UMaterialInterface *Material = nullptr;

@@ -8,6 +8,7 @@
 #include "PatchEdMode.h"
 #include "PatchOperations.h"
 #include "PatchToolkit.h"
+#include "PatchViewPlane.h"
 #include "SceneManagement.h"
 #include "Settings/LevelEditorViewportSettings.h"
 
@@ -129,16 +130,15 @@ void FPatchEdMode::UpdateHover(FEditorViewportClient *Client, FViewport *VP, int
                 FVector2D Pixel;
                 if (!View->WorldToPixel(At, Pixel))
                     continue;
-                const double Dist = (Mouse - Pixel).Length(), Z = View->WorldToScreen(At).W;
+                const double Dist = (Mouse - Pixel).Length();
+                const double Z = (At - View->ViewMatrices.GetViewOrigin()).Dot(View->GetViewDirection());
                 if (Dist > 10 || (Dist > Best + .1 || (FMath::Abs(Best - Dist) < .1 && Z >= Depth)))
                     continue;
                 if (!Options->bDrillDown)
                 {
-                    const FViewportCursorLocation Ray(View, Client, FMath::RoundToInt(Pixel.X),
-                                                      FMath::RoundToInt(Pixel.Y));
+                    const FRay Ray = PatchCursorRay(*View, *Client, FIntPoint(FMath::RoundToInt(Pixel.X), FMath::RoundToInt(Pixel.Y)));
                     FHitResult Hit;
-                    const auto Origin = Ray.GetOrigin();
-                    if (GetWorld()->LineTraceSingleByChannel(Hit, Origin, At, ECC_Visibility) &&
+                    if (GetWorld()->LineTraceSingleByChannel(Hit, Ray.Origin, At, ECC_Visibility) &&
                         FVector::Distance(Hit.ImpactPoint, At) > FMath::Max(1., PixelScale(*View, At) * 3.))
                         continue;
                 }

@@ -7,6 +7,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "EngineUtils.h"
 #include "PatchEdMode.h"
+#include "PatchViewPlane.h"
 #include "PatchToolkit.h"
 #include "SceneManagement.h"
 #include "Toolkits/ToolkitManager.h"
@@ -230,7 +231,7 @@ void FPatchEdMode::Render(const FSceneView *View, FViewport *VP, FPrimitiveDrawI
     if (bDrawing && Cursor.IsSet())
     {
         const FVector Delta = *Cursor - DrawOrigin;
-        const FVector Along = FMath::Abs(DrawNormal.X) > .9 ? FVector(0, Delta.Y, 0) : FVector(Delta.X, 0, 0);
+        const FVector Along = Delta.ProjectOnToNormal(DrawRotation.GetAxisX());
         const FVector Across = Delta - Along;
         const FVector Corners[] = {DrawOrigin, DrawOrigin + Along, *Cursor, DrawOrigin + Across};
         for (int32 I = 0; I < 4; ++I)
@@ -279,7 +280,8 @@ bool FPatchEdMode::HandleClick(FEditorViewportClient *Client, HHitProxy *Proxy, 
         return true;
     if (Tool == Cmd::Faces)
     {
-        FaceToTerrain(Client, Click);
+        if (const auto Ray = PatchCursorRay(*Client, Click.GetClickPos()))
+            FaceToTerrain(*Ray);
         return true;
     }
     if (Tool == Cmd::DrawTerrain || Tool == Cmd::Paint || Tool == Cmd::Sculpt)
@@ -305,7 +307,8 @@ bool FPatchEdMode::HandleClick(FEditorViewportClient *Client, HHitProxy *Proxy, 
     {
         int32 X, Y;
         FVector World;
-        if (HitSurface(*P, Click.GetOrigin(), Click.GetDirection(), World, X, Y) && P->Grid.Kind == EPatchKind::Terrain)
+        const auto Ray = PatchCursorRay(*Client, Click.GetClickPos());
+        if (Ray && P->Grid.Kind == EPatchKind::Terrain && HitSurface(*P, Ray->Origin, Ray->Direction, World, X, Y))
         {
             const FScopedTransaction Tx(FText::FromString(TEXT("Turn terrain edge")));
             P->Modify();
@@ -460,13 +463,13 @@ void FPatchEdMode::TransformPoints(const FVector &Drag, const FRotator &Rot, con
     }
 }
 
-bool FPatchEdMode::BrushAt(FEditorViewportClient *Client, FViewport *, double Drag)
+bool FPatchEdMode::BrushAt(FEditorViewportClient *Client, FViewport *VP, double Drag)
 {
     auto *P = Active();
     if (!P)
         return false;
-    auto Ray = Client->GetCursorWorldLocationFromMousePos();
-    return BrushRay(Ray.GetOrigin(), Ray.GetDirection(), Drag);
+    const auto Ray = PatchCursorRay(*Client, FIntPoint(VP->GetMouseX(), VP->GetMouseY()));
+    return Ray && BrushRay(Ray->Origin, Ray->Direction, Drag);
 }
 void FPatchEdMode::BeginBrushStroke()
 {
@@ -629,7 +632,7 @@ bool FPatchEdMode::MouseMove(FEditorViewportClient *Client, FViewport *VP, int32
     }
     if (bDrawing)
     {
-        Cursor = PlanePoint(Client, DrawOrigin, DrawNormal);
+        Cursor = PlanePoint(Client, DrawOrigin, DrawRotation.GetUpVector());
         Client->Invalidate();
         return true;
     }
@@ -715,28 +718,24 @@ bool FPatchEdMode::InputKey(FEditorViewportClient *Client, FViewport *VP, FKey K
     {
         if (Event == IE_Pressed)
         {
-            DrawNormal = FVector::UpVector;
-            if (Client->IsOrtho())
-                DrawNormal = Client->GetCursorWorldLocationFromMousePos().GetDirection().GetSafeNormal();
-            DrawOrigin = PlanePoint(Client, GEditor->ClickLocation, DrawNormal);
+            DrawRotation = PatchPlaneRotation(*Client);
+            DrawOrigin = PlanePoint(Client, GEditor->ClickLocation, DrawRotation.GetUpVector());
             Cursor = DrawOrigin;
             bDrawing = true;
         }
         if (Event == IE_Released && bDrawing)
         {
-            const FVector End = PlanePoint(Client, DrawOrigin, DrawNormal);
-            const FVector U = FMath::Abs(DrawNormal.X) > .9 ? FVector::RightVector : FVector::ForwardVector;
-            const FVector V = FVector::CrossProduct(DrawNormal, U).GetSafeNormal();
-            const FVector Delta = End - DrawOrigin;
-            const double W = FVector::DotProduct(Delta, U), H = FVector::DotProduct(Delta, V);
+            const FVector End = PlanePoint(Client, DrawOrigin, DrawRotation.GetUpVector());
+            const FVector Delta = DrawRotation.UnrotateVector(End - DrawOrigin);
+            const double W = Delta.X, H = Delta.Y;
             if (FMath::Abs(W) > 1 && FMath::Abs(H) > 1)
             {
                 const FScopedTransaction Tx(FText::FromString(TEXT("Draw terrain patch")));
                 auto G = FPatchGrid::Make(EPatchPrimitive::Terrain, 2, 2, FVector(1), 0);
                 for (auto &Pt : G.Points)
-                    Pt.Position = U * (Pt.UV.X * W) + V * (Pt.UV.Y * H);
+                    Pt.Position = FVector(Pt.UV.X * W, Pt.UV.Y * H, 0);
                 G.bInverted = W * H < 0;
-                if (auto *P = Spawn(G, FTransform(DrawOrigin), TEXT("Terrain")))
+                if (auto *P = Spawn(G, FTransform(DrawRotation, DrawOrigin), TEXT("Terrain")))
                     SelectPatch(P);
             }
             bDrawing = false;

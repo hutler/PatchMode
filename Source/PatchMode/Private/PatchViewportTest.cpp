@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "PatchEdMode.h"
+#include "PatchTestViewport.h"
 #include "Editor.h"
 #include "EditorModeManager.h"
 #include "EditorViewportClient.h"
@@ -23,7 +24,8 @@
 class FPatchCapture : public IAutomationLatentCommand
 {
   public:
-    FPatchCapture(FAutomationTestBase *InTest) : Test(InTest), Start(FPlatformTime::Seconds())
+    FPatchCapture(FAutomationTestBase *InTest, TSharedRef<FPatchTestCamera> InCamera)
+        : Test(InTest), Camera(InCamera), Start(FPlatformTime::Seconds())
     {
     }
     bool Update() override
@@ -61,6 +63,7 @@ class FPatchCapture : public IAutomationLatentCommand
 
   private:
     FAutomationTestBase *Test;
+    TSharedRef<FPatchTestCamera> Camera;
     double Start;
 };
 
@@ -110,23 +113,22 @@ bool FPatchViewportTest::RunTest(const FString &)
     }
     Mode->SelectPatch(P);
     Mode->Execute(EPatchCommand::TurnEdge);
-    FLevelEditorViewportClient *Client = nullptr;
-    for (auto *Candidate : GEditor->GetLevelViewportClients())
-        if (Candidate && Candidate->Viewport && Candidate->IsPerspective())
-        {
-            Client = Candidate;
-            if (Candidate->Viewport == GEditor->GetActiveViewport())
-                break;
-        }
-    if (!TestNotNull(TEXT("Perspective level viewport available"), Client))
+    auto *Client = PatchTestViewport();
+    if (!TestNotNull(TEXT("Level viewport available"), Client))
         return false;
     const FVector Camera(610, -780, 650);
-    Client->SetViewLocation(Camera);
-    Client->SetViewRotation((FVector(65, 0, 0) - Camera).Rotation());
+    auto TestCamera = MakeShared<FPatchTestCamera>(*Client, Camera, FVector(65, 0, 0));
     FSceneViewFamilyContext Family(
         FSceneViewFamily::ConstructionValues(Client->Viewport, Client->GetScene(), Client->EngineShowFlags));
     const FSceneView *View = Client->CalcSceneView(&Family);
-    const FVector Center = (P->Grid.At(1, 1).Position + P->Grid.At(2, 2).Position) * .5;
+    if (!TestNotNull(TEXT("Scene view for terrain click"), View))
+        return false;
+    AddInfo(FString::Printf(TEXT("Testing %s projection, view direction %s"),
+                            Client->IsOrtho() ? TEXT("orthographic") : TEXT("perspective"),
+                            *View->GetViewDirection().ToString()));
+    if (Client->IsOrtho())
+        P->SetActorRotation(FQuat::FindBetweenNormals(FVector::UpVector, -View->GetViewDirection()));
+    const FVector Center = P->GetActorTransform().TransformPosition((P->Grid.At(1, 1).Position + P->Grid.At(2, 2).Position) * .5);
     FVector2D Pixel=FVector2D::ZeroVector;
     if (!TestTrue(TEXT("Terrain cell projects to viewport"), View && View->WorldToPixel(Center, Pixel)))
         return false;
@@ -134,10 +136,21 @@ bool FPatchViewportTest::RunTest(const FString &)
                          FMath::RoundToInt(Pixel.Y));
     TestTrue(TEXT("Turn Edge handles actual viewport click"), Mode->HandleClick(Client, nullptr, Click));
     TestTrue(TEXT("Only pointed terrain cell turned"), P->Grid.Turned[P->Grid.Cell(1, 1)] == 1);
+    if (Client->IsOrtho())
+    {
+        // The front half of the visible volume is behind the editor's default cursor-ray origin.
+        const FVector4 NearHalf = View->ScreenToWorld(View->CursorToScreen(Pixel.X, Pixel.Y, .75f));
+        const FVector Shift = (FVector(NearHalf) / NearHalf.W - Center).ProjectOnToNormal(View->GetViewDirection());
+        const FVector Original = P->GetActorLocation();
+        P->SetActorLocation(Original + Shift);
+        TestTrue(TEXT("Near-half terrain receives the same screen click"), Mode->HandleClick(Client, nullptr, Click));
+        TestEqual(TEXT("Second click restores the same diagonal"), int32(P->Grid.Turned[P->Grid.Cell(1, 1)]), 0);
+        P->SetActorLocation(Original);
+    }
     Client->Invalidate();
     if (FParse::Param(FCommandLine::Get(), TEXT("PatchPreviewPNG")))
     {
-        ADD_LATENT_AUTOMATION_COMMAND(FPatchCapture(this));
+        ADD_LATENT_AUTOMATION_COMMAND(FPatchCapture(this, TestCamera));
     }
     else
         Modes.DeactivateMode(FPatchEdMode::Id);

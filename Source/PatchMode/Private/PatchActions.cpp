@@ -10,6 +10,7 @@
 #include "PatchEdMode.h"
 #include "PatchOperations.h"
 #include "PatchToolkit.h"
+#include "PatchViewPlane.h"
 
 using Cmd = EPatchCommand;
 
@@ -257,8 +258,7 @@ void FPatchEdMode::Execute(Cmd C)
             for (auto *View : GEditor->GetLevelViewportClients())
                 if (View && View->Viewport == GEditor->GetActiveViewport() && View->IsOrtho())
                 {
-                    const FVector Normal = View->GetCursorWorldLocationFromMousePos().GetDirection().GetSafeNormal();
-                    Rotation = FQuat::FindBetweenNormals(FVector::UpVector, Normal);
+                    Rotation = PatchPlaneRotation(*View);
                     break;
                 }
         }
