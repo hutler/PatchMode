@@ -29,4 +29,18 @@ Patch Mode добавляет в Unreal Editor редактирование по
 
 В тестовом проекте откройте **Session Frontend → Automation** и запустите группу `PatchMode`. Тесты создают временные уровни. Для проверки конкретной проекции сначала активируйте нужный вид в Level Editor. Тесты вьюпорта используют его для выбора точки, перетаскивания, вытягивания края и смены диагонали Terrain.
 
+## Проверка коллизии на уровне PatchCollisionTest
+
+На уровне есть редактируемые `Terrain` и `Curve`, а также вертикальная запечённая сетка `Curve_Baked`. В примере собраны уровень, три меша сцены и проверочный скрипт. [Файлы примера](Examples/PatchCollisionTest/Content)
+
+1. Установите Patch Mode в тестовый проект по инструкции выше. В **Edit → Plugins** включите **Python Editor Script Plugin**.
+2. Закройте редактор. Скопируйте папки `Tests`, `PatchMeshes` и `Python` из `Examples/PatchCollisionTest/Content` в папку **Content** рядом с файлом `.uproject`. Уровень должен оказаться в `Content/Tests`, а меши — в `Content/PatchMeshes`.
+3. Откройте проект. В **Content Browser → Content → Tests** дважды щёлкните **PatchCollisionTest**. Откройте **Output Log** и в поле **Cmd** выполните `py check_patch_collision.py`.
+
+Скрипт пускает луч `Visibility` через поверхность, исключая исходную `Curve`. Он проверяет попадание в компонент актора `Curve_Baked` на расстоянии 80 см с допуском 0,5 см. Второй луч направлен от поверхности и должен пройти свободно. При успехе в журнале появится `PatchCollisionTest PASS` с координатами попадания.
+
+```text
+PatchCollisionTest PASS | Curve_Baked.StaticMeshComponent0 | 80.00 cm | impact (-420.0, 211.0, -17.0) | control ray clear
+```
+
 Исходный код Patch Mode распространяется под лицензией MIT. [Текст лицензии](LICENSE)
