@@ -33,14 +33,32 @@ Open the project and enable **Patch Mode** under **Edit → Plugins**. To run th
 | --- | --- |
 | Create a patch | Choose **Terrain** or **Curve**. Click to place its center, move the pointer to size the preview, then click again to confirm. |
 | Move a control point | With **Select** active, click a point and drag a colored axis. The viewport shows the offset as you drag. |
-| Extend a terrain edge | Choose **Extrude** and drag a boundary handle outward. For an exact distance, use **Active Tool → Extrude by length**. |
+| [Extend a terrain edge](#extrude-a-terrain-edge) | Choose **Extrude** and drag a boundary handle outward. For an exact distance, use **Active Tool → Extrude by length**. |
 | Place a rope | Choose **Primitives → Rope**, set **Rope Radius** and **Rope Sag Percent** under **Active Tool**, then click the two anchor positions in the viewport. |
-| Join two patches | Choose **Join → Connect Edges**. Click the source edge, then the destination edge. Both patches must have the same surface type and the edges must have the same number of control points. Press **R** to reverse the pairing, **Enter** to apply, or **Esc** to cancel. |
+| [Join two patches](#connect-two-patch-edges) | Choose **Join → Connect Edges**. Click the source edge, then the destination edge. Press **R** to reverse the pairing, **Enter** to apply, or **Esc** to cancel. |
 | Sculpt or paint | **Sculpt** changes the surface shape. **Paint** edits vertex color and alpha. The brush outline and highlighted points show which part of the surface a stroke will affect. |
 
 In an orthographic view, **Terrain**, **Curve**, and **Draw Terrain** create patches in the plane of the screen, facing the camera. A positive **Height** in **Sculpt** raises points along the patch's local Z axis. When control points project to the same screen position, picking favors the point nearest the camera.
 
 You can also split and refine the grid, lock points, edit three UV channels, and build shells. Press **Ctrl+Z** to undo a completed gesture.
+
+### Extrude a terrain edge
+
+Select the Terrain patch and choose **Extrude**. Hover over the right boundary until its handle turns gold, then drag outward and release. Here, a 150 cm drag adds a fifth column of control points. The original edge stays in place as an interior grid line.
+
+| Before dragging | After releasing the handle |
+| --- | --- |
+| ![Terrain with four columns of control points and the right boundary handle highlighted in gold.](docs/images/extrude-before.png) | ![The same terrain with an extra strip of surface between the original right edge and the new boundary.](docs/images/extrude-after.png) |
+
+### Connect two patch edges
+
+Choose **Join → Connect Edges**. Click the right edge of the teal source patch, then the facing edge of the orange destination patch. Both patches must have the same surface type, and the two edges must have the same number of control points. The white lines show which points will meet. If the lines cross, press **R** to reverse the pairing.
+
+| Before pressing Enter | After pressing Enter |
+| --- | --- |
+| ![Five white lines span the gap between the selected edges of the teal and orange terrain patches.](docs/images/connect-edges-before.png) | ![The teal patch extends to the orange patch and their edges meet along a continuous seam.](docs/images/connect-edges-after.png) |
+
+Press **Enter** to move the source edge onto the destination edge. The orange patch stays in place, and each patch remains a separate actor.
 
 ### Sculpt a terrain patch
 
